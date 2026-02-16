@@ -244,6 +244,8 @@ fn update_capture_menu_state(
 
 fn send_clipboard_notification(body: &str) {
     if let Err(err) = Command::new("notify-send")
+        .arg("-t")
+        .arg("1000")
         .arg(CLIPBOARD_NOTIFICATION_TITLE)
         .arg(body)
         .status()
