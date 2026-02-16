@@ -14,5 +14,6 @@
 
 ## Deployment
 - When asked to deploy or push, update the version in `Cargo.toml` and `flake.nix`.
+- Run `cargo update` (inside `nix develop`) to update `Cargo.lock` and include it in the release commit.
 - Run `nix flake update` to update `flake.lock` and include it in the release commit.
 - Create a commit message and push to the main branch.
