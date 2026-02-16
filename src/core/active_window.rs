@@ -9,6 +9,13 @@ pub struct ActiveWindowContext {
     pub backend: String,
     pub title: String,
     pub app_id: Option<String>,
+    pub initial_app_id: Option<String>,
+    pub initial_title: Option<String>,
+    pub window_id: Option<String>,
+    pub pid: Option<i64>,
+    pub workspace_id: Option<i64>,
+    pub workspace_name: Option<String>,
+    pub is_xwayland: Option<bool>,
 }
 
 pub trait ActiveWindowProvider: Send + Sync {
@@ -109,16 +116,36 @@ fn parse_hyprctl_active_window(raw: &str) -> Option<ActiveWindowContext> {
         return None;
     }
 
-    let app_id = parsed
-        .get("class")
+    let app_id = optional_trimmed_string(parsed.get("class"));
+    let initial_app_id = optional_trimmed_string(parsed.get("initialClass"));
+    let initial_title = optional_trimmed_string(parsed.get("initialTitle"));
+    let window_id = optional_trimmed_string(parsed.get("address"));
+    let pid = parsed.get("pid").and_then(|value| value.as_i64());
+
+    let workspace_id = parsed
+        .get("workspace")
+        .and_then(|workspace| workspace.get("id"))
+        .and_then(|value| value.as_i64());
+    let workspace_name = parsed
+        .get("workspace")
+        .and_then(|workspace| workspace.get("name"))
         .and_then(|value| value.as_str())
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
+
+    let is_xwayland = parsed.get("xwayland").and_then(|value| value.as_bool());
 
     Some(ActiveWindowContext {
         backend: "hyprctl".to_string(),
         title: title.to_string(),
         app_id,
+        initial_app_id,
+        initial_title,
+        window_id,
+        pid,
+        workspace_id,
+        workspace_name,
+        is_xwayland,
     })
 }
 
@@ -139,5 +166,19 @@ fn parse_title_with_backend(backend: &str, raw: &str) -> Option<ActiveWindowCont
         backend: backend.to_string(),
         title: title.to_string(),
         app_id: None,
+        initial_app_id: None,
+        initial_title: None,
+        window_id: None,
+        pid: None,
+        workspace_id: None,
+        workspace_name: None,
+        is_xwayland: None,
     })
+}
+
+fn optional_trimmed_string(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }

@@ -56,6 +56,10 @@ clipboard:
 - `kind: disabled` - do not capture active-window metadata
 - `kind: command` - run a custom command and parse stdout as a title
 
+When available, `source_window` metadata includes more than `title` and `app_id`
+(for example from `hyprctl`): `initial_app_id`, `initial_title`, `window_id`,
+`pid`, `workspace_id`, `workspace_name`, and `is_xwayland`.
+
 ### Active Window Blacklist
 
 Use `clipboard.active_window.blacklist` to skip clipboard capture when the focused

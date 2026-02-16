@@ -20,10 +20,13 @@ pub enum Commands {
     /// Print clipboard history from the cache database.
     History(HistoryArgs),
     /// Clear clipboard history from the cache database.
+    #[command(name = "clear")]
     ClearHistory,
     /// Pause clipboard capture.
+    #[command(name = "pause")]
     PauseCapture,
     /// Resume clipboard capture.
+    #[command(name = "resume")]
     ResumeCapture,
     /// Print clipboard capture status.
     CaptureStatus,

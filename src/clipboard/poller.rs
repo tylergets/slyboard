@@ -138,6 +138,13 @@ mod tests {
                 backend: "hyprctl".to_string(),
                 title: "KeePassXC".to_string(),
                 app_id: Some("keepassxc".to_string()),
+                initial_app_id: None,
+                initial_title: None,
+                window_id: None,
+                pid: None,
+                workspace_id: None,
+                workspace_name: None,
+                is_xwayland: None,
             })],
         );
         let mut poller = ClipboardPoller::new(backend, vec!["KeePassXC".to_string()]);
@@ -154,6 +161,13 @@ mod tests {
                 backend: "xdotool".to_string(),
                 title: "Slack | direct messages".to_string(),
                 app_id: None,
+                initial_app_id: None,
+                initial_title: None,
+                window_id: None,
+                pid: None,
+                workspace_id: None,
+                workspace_name: None,
+                is_xwayland: None,
             })],
         );
         let mut poller = ClipboardPoller::new(backend, vec!["slack".to_string()]);
@@ -170,6 +184,13 @@ mod tests {
                 backend: "hyprctl".to_string(),
                 title: "Terminal".to_string(),
                 app_id: Some("kitty".to_string()),
+                initial_app_id: None,
+                initial_title: None,
+                window_id: None,
+                pid: None,
+                workspace_id: None,
+                workspace_name: None,
+                is_xwayland: None,
             })],
         );
         let mut poller = ClipboardPoller::new(backend, vec!["slack".to_string()]);

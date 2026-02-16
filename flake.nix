@@ -46,7 +46,7 @@
           // {
             inherit cargoArtifacts;
             pname = "slyboard";
-            version = "0.2.7";
+            version = "0.2.8";
             meta = {
               mainProgram = "slyboard";
             };

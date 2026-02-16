@@ -62,9 +62,10 @@ fn run(config_path_override: Option<std::path::PathBuf>) -> Result<()> {
 fn print_history(json: bool, include_images: bool) -> Result<()> {
     let shared_state = SharedClipboardState::load_default(DEFAULT_HISTORY_LIMIT)?;
     let history = shared_state.history_snapshot();
+    let entries: Vec<&ClipboardEntry> = history.iter().rev().collect();
 
     if json {
-        let serializable: Vec<SerializableHistoryEntry> = history
+        let serializable: Vec<SerializableHistoryEntry> = entries
             .iter()
             .enumerate()
             .map(|(id, entry)| SerializableHistoryEntry::new(id, entry, include_images))
@@ -73,7 +74,7 @@ fn print_history(json: bool, include_images: bool) -> Result<()> {
         return Ok(());
     }
 
-    for (id, entry) in history.iter().enumerate() {
+    for (id, entry) in entries.iter().enumerate() {
         println!("{}", format_history_entry(id, entry));
     }
     Ok(())
@@ -215,20 +216,48 @@ fn format_entry_with_source(
     source_window: Option<&ActiveWindowContext>,
 ) -> String {
     match source_window {
-        Some(context) => {
-            if let Some(app_id) = &context.app_id {
-                format!(
-                    "{}: {} [source: {} ({}) via {}]",
-                    id, value, context.title, app_id, context.backend
-                )
-            } else {
-                format!(
-                    "{}: {} [source: {} via {}]",
-                    id, value, context.title, context.backend
-                )
-            }
-        }
+        Some(context) => format!(
+            "{}: {} [source: {} via {}]",
+            id,
+            value,
+            format_window_source(context),
+            context.backend
+        ),
         None => format!("{}: {}", id, value),
+    }
+}
+
+fn format_window_source(context: &ActiveWindowContext) -> String {
+    let mut details = Vec::new();
+    if let Some(app_id) = &context.app_id {
+        details.push(format!("app_id={app_id}"));
+    }
+    if let Some(initial_app_id) = &context.initial_app_id {
+        details.push(format!("initial_app_id={initial_app_id}"));
+    }
+    if let Some(initial_title) = &context.initial_title {
+        details.push(format!("initial_title={initial_title}"));
+    }
+    if let Some(window_id) = &context.window_id {
+        details.push(format!("window_id={window_id}"));
+    }
+    if let Some(pid) = context.pid {
+        details.push(format!("pid={pid}"));
+    }
+    if let Some(workspace_id) = context.workspace_id {
+        details.push(format!("workspace_id={workspace_id}"));
+    }
+    if let Some(workspace_name) = &context.workspace_name {
+        details.push(format!("workspace_name={workspace_name}"));
+    }
+    if let Some(is_xwayland) = context.is_xwayland {
+        details.push(format!("xwayland={is_xwayland}"));
+    }
+
+    if details.is_empty() {
+        context.title.clone()
+    } else {
+        format!("{} ({})", context.title, details.join(", "))
     }
 }
 
