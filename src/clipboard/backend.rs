@@ -1,20 +1,28 @@
 use crate::clipboard::ClipboardEntry;
+use crate::core::active_window::{ActiveWindowContext, ActiveWindowProvider};
 
 pub trait ClipboardBackend {
     fn read_entry(&self) -> Option<ClipboardEntry>;
+    fn read_active_window(&self) -> Option<ActiveWindowContext> {
+        None
+    }
 }
 
 #[cfg(target_os = "linux")]
-#[derive(Clone)]
 pub struct GtkClipboardBackend {
     clipboard: gtk::Clipboard,
+    active_window_provider: Box<dyn ActiveWindowProvider>,
 }
 
 #[cfg(target_os = "linux")]
 impl GtkClipboardBackend {
-    pub fn new(clipboard: &gtk::Clipboard) -> Self {
+    pub fn new(
+        clipboard: &gtk::Clipboard,
+        active_window_provider: Box<dyn ActiveWindowProvider>,
+    ) -> Self {
         Self {
             clipboard: clipboard.clone(),
+            active_window_provider,
         }
     }
 }
@@ -25,7 +33,10 @@ impl ClipboardBackend for GtkClipboardBackend {
         if let Some(text) = self.clipboard.wait_for_text() {
             let value = text.to_string();
             if !value.is_empty() {
-                return Some(ClipboardEntry::Text { value });
+                return Some(ClipboardEntry::Text {
+                    value,
+                    source_window: None,
+                });
             }
         }
 
@@ -44,6 +55,11 @@ impl ClipboardBackend for GtkClipboardBackend {
             bits_per_sample: image.bits_per_sample(),
             channels: image.n_channels(),
             pixels,
+            source_window: None,
         })
+    }
+
+    fn read_active_window(&self) -> Option<ActiveWindowContext> {
+        self.active_window_provider.capture()
     }
 }

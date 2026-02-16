@@ -61,7 +61,10 @@ pub fn load_history(path: &PathBuf, history_limit: usize) -> Result<VecDeque<Cli
         } => {
             for item in old_entries {
                 if !item.is_empty() {
-                    history.push_back(ClipboardEntry::Text { value: item });
+                    history.push_back(ClipboardEntry::Text {
+                        value: item,
+                        source_window: None,
+                    });
                 }
             }
         }

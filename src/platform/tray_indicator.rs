@@ -15,6 +15,9 @@ use libappindicator::{AppIndicator as LibAppIndicator, AppIndicatorStatus};
 use crate::clipboard::backend::GtkClipboardBackend;
 use crate::clipboard::poller::{start_gtk_polling, ClipboardPoller};
 use crate::clipboard::{ClipboardEntry, SharedClipboardState};
+use crate::config::{ClipboardBackend, ClipboardConfig};
+use crate::core::active_window::provider_from_config;
+use crate::core::capture_control::{is_capture_paused, set_capture_paused};
 
 pub struct TrayIndicator {
     _gtk_thread: JoinHandle<()>,
@@ -27,8 +30,15 @@ const MENU_LABEL_CHAR_LIMIT: usize = 70;
 const CLIPBOARD_NOTIFICATION_TITLE: &str = "slyboard";
 const CLIPBOARD_TEXT_NOTIFICATION_BODY: &str = "text copied to clipboard";
 const CLIPBOARD_IMAGE_NOTIFICATION_BODY: &str = "image copied to clipboard";
+const RUNNING_LABEL: &str = "Running";
+const PAUSED_LABEL: &str = "Paused";
+const PAUSE_CAPTURE_LABEL: &str = "Pause Capture";
+const RESUME_CAPTURE_LABEL: &str = "Resume Capture";
 
-pub fn start(shared_state: SharedClipboardState) -> Option<TrayIndicator> {
+pub fn start(
+    shared_state: SharedClipboardState,
+    clipboard_config: ClipboardConfig,
+) -> Option<TrayIndicator> {
     if env::var_os("DISPLAY").is_none() {
         eprintln!("warning: DISPLAY is not set; cannot create tray icon");
         return None;
@@ -39,7 +49,7 @@ pub fn start(shared_state: SharedClipboardState) -> Option<TrayIndicator> {
 
     let (ready_tx, ready_rx) = mpsc::channel();
     let gtk_thread = std::thread::spawn(move || {
-        if let Err(err) = run_indicator(ready_tx, shared_state) {
+        if let Err(err) = run_indicator(ready_tx, shared_state, clipboard_config) {
             eprintln!("tray thread exited: {err}");
         }
     });
@@ -65,6 +75,7 @@ pub fn start(shared_state: SharedClipboardState) -> Option<TrayIndicator> {
 fn run_indicator(
     ready_tx: Sender<Result<(), String>>,
     shared_state: SharedClipboardState,
+    clipboard_config: ClipboardConfig,
 ) -> Result<(), String> {
     if let Err(err) = gtk::init() {
         let msg = err.to_string();
@@ -78,9 +89,15 @@ fn run_indicator(
     indicator.set_status(AppIndicatorStatus::Active);
 
     let clipboard = gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD);
-    let poller = Rc::new(RefCell::new(ClipboardPoller::new(
-        GtkClipboardBackend::new(&clipboard),
-    )));
+    let poller = match clipboard_config.backend {
+        ClipboardBackend::Gtk => Rc::new(RefCell::new(ClipboardPoller::new(
+            GtkClipboardBackend::new(
+                &clipboard,
+                provider_from_config(&clipboard_config.active_window.backend),
+            ),
+            clipboard_config.active_window.blacklist.clone(),
+        ))),
+    };
     if let Some(entry) = poller.borrow_mut().poll_once() {
         if let Err(err) = shared_state.record_entry(entry) {
             eprintln!("failed to seed clipboard history: {err}");
@@ -88,10 +105,36 @@ fn run_indicator(
     }
 
     let mut menu = gtk::Menu::new();
-    let running_item = gtk::MenuItem::with_label("Running");
+    let running_item = gtk::MenuItem::with_label(RUNNING_LABEL);
     running_item.set_sensitive(false);
     menu.append(&running_item);
     running_item.show();
+
+    let capture_paused = Rc::new(RefCell::new(match is_capture_paused() {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("warning: failed to read capture pause state: {err}");
+            false
+        }
+    }));
+
+    let pause_item = gtk::MenuItem::with_label(PAUSE_CAPTURE_LABEL);
+    update_capture_menu_state(&running_item, &pause_item, *capture_paused.borrow());
+    let capture_paused_for_toggle = capture_paused.clone();
+    let running_item_for_toggle = running_item.clone();
+    let pause_item_for_toggle = pause_item.clone();
+    pause_item.connect_activate(move |_| {
+        let next_state = !*capture_paused_for_toggle.borrow();
+        if let Err(err) = set_capture_paused(next_state) {
+            eprintln!("failed to update capture pause state: {err}");
+            return;
+        }
+
+        *capture_paused_for_toggle.borrow_mut() = next_state;
+        update_capture_menu_state(&running_item_for_toggle, &pause_item_for_toggle, next_state);
+    });
+    menu.append(&pause_item);
+    pause_item.show();
 
     let separator = gtk::SeparatorMenuItem::new();
     menu.append(&separator);
@@ -103,6 +146,24 @@ fn run_indicator(
     menu.append(&history_root_item);
     history_root_item.show();
     refresh_history_menu(&history_menu, &clipboard, &shared_state.history_snapshot());
+
+    let clear_history_item = gtk::MenuItem::with_label("Clear History");
+    let shared_state_for_clear = shared_state.clone();
+    let history_menu_for_clear = history_menu.clone();
+    let clipboard_for_clear = clipboard.clone();
+    clear_history_item.connect_activate(move |_| {
+        if let Err(err) = shared_state_for_clear.clear_history() {
+            eprintln!("failed to clear clipboard history: {err}");
+            return;
+        }
+        refresh_history_menu(
+            &history_menu_for_clear,
+            &clipboard_for_clear,
+            &shared_state_for_clear.history_snapshot(),
+        );
+    });
+    menu.append(&clear_history_item);
+    clear_history_item.show();
 
     let separator = gtk::SeparatorMenuItem::new();
     menu.append(&separator);
@@ -119,10 +180,31 @@ fn run_indicator(
     let shared_state_for_poll = shared_state.clone();
     let history_menu_for_poll = history_menu.clone();
     let clipboard_for_menu = clipboard.clone();
+    let capture_paused_for_poll = capture_paused.clone();
+    let running_item_for_poll = running_item.clone();
+    let pause_item_for_poll = pause_item.clone();
     start_gtk_polling(
         poller,
         Duration::from_millis(CLIPBOARD_POLL_INTERVAL_MS),
         move |entry| {
+            let paused = match is_capture_paused() {
+                Ok(value) => value,
+                Err(err) => {
+                    eprintln!("warning: failed to read capture pause state: {err}");
+                    *capture_paused_for_poll.borrow()
+                }
+            };
+            {
+                let mut pause_state = capture_paused_for_poll.borrow_mut();
+                if *pause_state != paused {
+                    *pause_state = paused;
+                    update_capture_menu_state(&running_item_for_poll, &pause_item_for_poll, paused);
+                }
+            }
+            if paused {
+                return;
+            }
+
             let notification_body = notification_body_for_entry(&entry);
             let changed = match shared_state_for_poll.record_entry(entry) {
                 Ok(changed) => changed,
@@ -144,6 +226,20 @@ fn run_indicator(
     let _ = ready_tx.send(Ok(()));
     gtk::main();
     Ok(())
+}
+
+fn update_capture_menu_state(
+    running_item: &gtk::MenuItem,
+    pause_item: &gtk::MenuItem,
+    paused: bool,
+) {
+    if paused {
+        running_item.set_label(PAUSED_LABEL);
+        pause_item.set_label(RESUME_CAPTURE_LABEL);
+    } else {
+        running_item.set_label(RUNNING_LABEL);
+        pause_item.set_label(PAUSE_CAPTURE_LABEL);
+    }
 }
 
 fn send_clipboard_notification(body: &str) {
@@ -187,7 +283,7 @@ fn refresh_history_menu(
 
 fn format_menu_label(entry: &ClipboardEntry) -> String {
     match entry {
-        ClipboardEntry::Text { value } => format_text_menu_label(value),
+        ClipboardEntry::Text { value, .. } => format_text_menu_label(value),
         ClipboardEntry::Image { width, height, .. } => {
             format!("[image] {}x{}", width, height)
         }
@@ -207,7 +303,7 @@ fn format_text_menu_label(value: &str) -> String {
 
 fn set_clipboard_value(clipboard: &gtk::Clipboard, entry: &ClipboardEntry) {
     match entry {
-        ClipboardEntry::Text { value } => {
+        ClipboardEntry::Text { value, .. } => {
             clipboard.set_text(value);
             clipboard.store();
         }

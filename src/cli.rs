@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser};
 
 #[derive(Debug, Parser)]
 #[command(name = "slyboard", version, about = "Slyboard daemon")]
@@ -13,12 +13,20 @@ pub struct Cli {
     pub config: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Subcommand)]
+#[derive(Debug, Clone, clap::Subcommand)]
 pub enum Commands {
     /// Run the clipboard manager daemon.
     Run,
     /// Print clipboard history from the cache database.
     History(HistoryArgs),
+    /// Clear clipboard history from the cache database.
+    ClearHistory,
+    /// Pause clipboard capture.
+    PauseCapture,
+    /// Resume clipboard capture.
+    ResumeCapture,
+    /// Print clipboard capture status.
+    CaptureStatus,
     /// Load and validate config, then exit.
     ValidateConfig,
 }
@@ -28,4 +36,7 @@ pub struct HistoryArgs {
     /// Emit clipboard history as JSON.
     #[arg(long)]
     pub json: bool,
+    /// Include full image pixel bytes in history output.
+    #[arg(long)]
+    pub images: bool,
 }

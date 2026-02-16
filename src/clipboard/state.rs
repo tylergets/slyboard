@@ -6,6 +6,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::clipboard::storage;
+use crate::core::active_window::ActiveWindowContext;
 
 pub const DEFAULT_HISTORY_LIMIT: usize = 50;
 
@@ -14,6 +15,8 @@ pub const DEFAULT_HISTORY_LIMIT: usize = 50;
 pub enum ClipboardEntry {
     Text {
         value: String,
+        #[serde(default)]
+        source_window: Option<ActiveWindowContext>,
     },
     Image {
         width: i32,
@@ -23,15 +26,31 @@ pub enum ClipboardEntry {
         bits_per_sample: i32,
         channels: i32,
         pixels: Vec<u8>,
+        #[serde(default)]
+        source_window: Option<ActiveWindowContext>,
     },
 }
 
 impl ClipboardEntry {
     pub fn is_empty(&self) -> bool {
         match self {
-            ClipboardEntry::Text { value } => value.is_empty(),
+            ClipboardEntry::Text { value, .. } => value.is_empty(),
             ClipboardEntry::Image { pixels, .. } => pixels.is_empty(),
         }
+    }
+
+    pub fn with_source_window(mut self, source_window: Option<ActiveWindowContext>) -> Self {
+        match &mut self {
+            ClipboardEntry::Text {
+                source_window: existing,
+                ..
+            } => *existing = source_window,
+            ClipboardEntry::Image {
+                source_window: existing,
+                ..
+            } => *existing = source_window,
+        }
+        self
     }
 }
 
@@ -56,6 +75,11 @@ impl SharedClipboardState {
     pub fn history_snapshot(&self) -> Vec<ClipboardEntry> {
         let guard = self.inner.lock().expect("clipboard state mutex poisoned");
         guard.history_snapshot()
+    }
+
+    pub fn clear_history(&self) -> Result<()> {
+        let mut guard = self.inner.lock().expect("clipboard state mutex poisoned");
+        guard.clear_history()
     }
 }
 
@@ -87,6 +111,11 @@ impl ClipboardState {
 
         storage::save_history(&self.database_path, &self.history)?;
         Ok(true)
+    }
+
+    pub fn clear_history(&mut self) -> Result<()> {
+        self.history.clear();
+        storage::save_history(&self.database_path, &self.history)
     }
 }
 
