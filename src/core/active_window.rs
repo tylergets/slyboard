@@ -75,8 +75,21 @@ impl AutoActiveWindowProvider {
                     parse_hyprctl_active_window,
                 )),
                 Box::new(CommandActiveWindowProvider::new(
-                    "xdotool",
-                    vec!["getactivewindow".into(), "getwindowname".into()],
+                    "sh",
+                    vec![
+                        "-c".into(),
+                        "window_id=$(xdotool getactivewindow 2>/dev/null) || exit 1; \
+title=$(xdotool getwindowname \"$window_id\" 2>/dev/null || true); \
+app_id=$(xdotool getwindowclassname \"$window_id\" 2>/dev/null || true); \
+pid=$(xdotool getwindowpid \"$window_id\" 2>/dev/null || true); \
+workspace_id=$(xdotool get_desktop_for_window \"$window_id\" 2>/dev/null || true); \
+printf 'window_id=%s\\n' \"$window_id\"; \
+printf 'title=%s\\n' \"$title\"; \
+printf 'app_id=%s\\n' \"$app_id\"; \
+printf 'pid=%s\\n' \"$pid\"; \
+printf 'workspace_id=%s\\n' \"$workspace_id\";"
+                            .into(),
+                    ],
                     parse_xdotool_active_window,
                 )),
             ],
@@ -150,7 +163,56 @@ fn parse_hyprctl_active_window(raw: &str) -> Option<ActiveWindowContext> {
 }
 
 fn parse_xdotool_active_window(raw: &str) -> Option<ActiveWindowContext> {
-    parse_title_with_backend("xdotool", raw)
+    let mut title: Option<String> = None;
+    let mut app_id: Option<String> = None;
+    let mut window_id: Option<String> = None;
+    let mut pid: Option<i64> = None;
+    let mut workspace_id: Option<i64> = None;
+
+    for line in raw.lines() {
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let value = value.trim();
+        match key {
+            "title" => {
+                if !value.is_empty() {
+                    title = Some(value.to_string());
+                }
+            }
+            "app_id" => {
+                if !value.is_empty() {
+                    app_id = Some(value.to_string());
+                }
+            }
+            "window_id" => {
+                if !value.is_empty() {
+                    window_id = Some(value.to_string());
+                }
+            }
+            "pid" => {
+                pid = value.parse::<i64>().ok();
+            }
+            "workspace_id" => {
+                workspace_id = value.parse::<i64>().ok();
+            }
+            _ => {}
+        }
+    }
+
+    let title = title?;
+    Some(ActiveWindowContext {
+        backend: "xdotool".to_string(),
+        title,
+        app_id,
+        initial_app_id: None,
+        initial_title: None,
+        window_id,
+        pid,
+        workspace_id,
+        workspace_name: None,
+        is_xwayland: None,
+    })
 }
 
 fn parse_command_active_window(raw: &str) -> Option<ActiveWindowContext> {

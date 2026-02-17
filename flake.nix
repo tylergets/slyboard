@@ -56,6 +56,13 @@
                   pkgs.libappindicator-gtk3
                   pkgs.gtk3
                 ]}"
+              if [ -x "$out/bin/slyboard-rofi" ]; then
+                wrapProgram "$out/bin/slyboard-rofi" \
+                  --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [
+                    pkgs.libappindicator-gtk3
+                    pkgs.gtk3
+                  ]}"
+              fi
             '';
           }
         );

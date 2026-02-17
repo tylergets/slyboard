@@ -1,24 +1,19 @@
 mod cli;
-mod clipboard;
-mod config;
-mod core;
-mod platform;
-
 use std::thread;
 use std::time::Duration;
 
 use anyhow::Result;
 use clap::Parser;
 use serde::Serialize;
+use slyboard::clipboard::{ClipboardEntry, SharedClipboardState, DEFAULT_HISTORY_LIMIT};
+use slyboard::config::AppConfig;
+use slyboard::core::active_window::ActiveWindowContext;
+use slyboard::core::capture_control::{is_capture_paused, set_capture_paused};
+use slyboard::core::instance_lock::InstanceLock;
+#[cfg(target_os = "linux")]
+use slyboard::platform::tray_indicator;
 
 use crate::cli::{Cli, Commands, HistoryArgs};
-use crate::clipboard::{ClipboardEntry, SharedClipboardState, DEFAULT_HISTORY_LIMIT};
-use crate::config::AppConfig;
-use crate::core::active_window::ActiveWindowContext;
-use crate::core::capture_control::{is_capture_paused, set_capture_paused};
-use crate::core::instance_lock::InstanceLock;
-#[cfg(target_os = "linux")]
-use crate::platform::tray_indicator;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();

@@ -8,6 +8,7 @@ It watches clipboard changes, stores recent entries on disk, and lets you restor
 
 - Clipboard history for text and images
 - Tray icon menu with clickable history items
+- `rofi` picker binary for quick keyboard-driven restore
 - Persistent history cache across restarts
 - Optional active-window metadata capture
 - Single-instance lock to avoid duplicate daemons
@@ -15,6 +16,7 @@ It watches clipboard changes, stores recent entries on disk, and lets you restor
 ## Requirements
 
 - Linux desktop session (GTK/AppIndicator)
+- `rofi` (optional, required for `slyboard-rofi`)
 - Nix (recommended), or a Rust toolchain plus GTK/AppIndicator dev libraries
 
 ## Quick Start (Nix)
@@ -56,9 +58,10 @@ clipboard:
 - `kind: disabled` - do not capture active-window metadata
 - `kind: command` - run a custom command and parse stdout as a title
 
-When available, `source_window` metadata includes more than `title` and `app_id`
-(for example from `hyprctl`): `initial_app_id`, `initial_title`, `window_id`,
-`pid`, `workspace_id`, `workspace_name`, and `is_xwayland`.
+When available, `source_window` metadata includes more than `title` and `app_id`.
+`hyprctl` provides the richest details (`initial_app_id`, `initial_title`,
+`window_id`, `pid`, `workspace_id`, `workspace_name`, and `is_xwayland`), while
+`xdotool` includes `window_id`, `pid`, and `workspace_id`.
 
 ### Active Window Blacklist
 
@@ -112,6 +115,12 @@ slyboard validate-config
 
 # Use explicit config path
 slyboard --config /path/to/config.yaml run
+
+# Open clipboard history in rofi and restore selection
+slyboard-rofi
+
+# Customize rofi invocation details
+slyboard-rofi --prompt "clipboard" --lines 25 --rofi-bin rofi
 ```
 
 ## Data and Runtime Paths
